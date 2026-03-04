@@ -8,6 +8,8 @@ package dialog
 
 import (
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -150,13 +152,48 @@ func orDefault(s, def string) string {
 	return def
 }
 
-// accentCSS returns CSS that colors a headerbar with class pinentry-header.
+// accentCSS returns CSS that sets the background of a headerbar with class
+// pinentry-header.
 func accentCSS(color string) string {
 	return fmt.Sprintf(
-		"headerbar.pinentry-header { background: %[1]s; background-color: %[1]s; }"+
-			" headerbar.pinentry-header * { color: white; }",
+		"headerbar.pinentry-header { background: %[1]s; background-color: %[1]s; }",
 		color,
 	)
+}
+
+// keyLabelCSS returns CSS that sets the text color and weight for the key label.
+func keyLabelCSS(bgColor string) string {
+	return fmt.Sprintf(
+		"label { color: %s; font-weight: bold; }",
+		contrastColor(bgColor),
+	)
+}
+
+// contrastColor returns "black" or "white", whichever has higher contrast
+// against the given CSS hex color (#rrggbb), using WCAG relative luminance.
+func contrastColor(cssColor string) string {
+	hex := strings.TrimPrefix(cssColor, "#")
+	if len(hex) != 6 {
+		return "white"
+	}
+	rv, err1 := strconv.ParseUint(hex[0:2], 16, 64)
+	gv, err2 := strconv.ParseUint(hex[2:4], 16, 64)
+	bv, err3 := strconv.ParseUint(hex[4:6], 16, 64)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return "white"
+	}
+	lin := func(c float64) float64 {
+		c /= 255
+		if c <= 0.03928 {
+			return c / 12.92
+		}
+		return math.Pow((c+0.055)/1.055, 2.4)
+	}
+	L := 0.2126*lin(float64(rv)) + 0.7152*lin(float64(gv)) + 0.0722*lin(float64(bv))
+	if L > 0.179 {
+		return "#1a1a1a"
+	}
+	return "#f2f2f2"
 }
 
 // buildWindow creates an ApplicationWindow with a colored header bar.
@@ -178,6 +215,9 @@ func (d *Dialog) buildWindow(title string, st config.Style) (
 
 	keyLabel = gtk.NewLabel(st.Name)
 	keyLabel.SetSelectable(true)
+	labelProvider := gtk.NewCSSProvider()
+	labelProvider.LoadFromString(keyLabelCSS(st.Color))
+	keyLabel.StyleContext().AddProvider(labelProvider, 600)
 	header.SetTitleWidget(keyLabel)
 
 	provider := gtk.NewCSSProvider()
