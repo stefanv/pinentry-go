@@ -1,5 +1,7 @@
 # pinentry-go
 
+<img width="442" height="213" alt="image" src="https://github.com/user-attachments/assets/da4a080e-81fd-4f33-be93-5ad3e036ff42" />
+
 ## IMPORTANT NOTE
 
 This project was built as an experiment, using Claude. It
