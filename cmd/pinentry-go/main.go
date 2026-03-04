@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/stefanv/pinentry-go/internal/dialog"
 	"github.com/stefanv/pinentry-go/internal/pinentry"
 )
 
@@ -14,7 +15,8 @@ func main() {
 	log.SetFlags(0)
 	log.SetOutput(os.Stderr)
 
-	if err := pinentry.Serve(os.Stdin, os.Stdout); err != nil {
+	p := dialog.New()
+	if err := pinentry.Serve(os.Stdin, os.Stdout, p); err != nil {
 		log.Fatal(err)
 	}
 }
