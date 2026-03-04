@@ -1,5 +1,24 @@
 # pinentry-go
 
+## IMPORTANT NOTE
+
+This project was built as an experiment, using Claude. It
+solves a real-world problem for me, which is that I have several types
+of keys managed by GPG keyring. Sometimes, git requires both my
+signing key and my SSH key, and it's not always apparent which one I
+am unlocking. I therefore wanted a pinentry program that very clearly
+visually distinguishes between keys.
+
+You are welcome to use this code, but take it for what it is.
+I'd probably be a bit nervous about running an unverified pinentry program written by someone else—so why not take a look at the source and verify for yourself first (there's not that much of it)?
+For an extra layer of safety, you can build the binary yourself too:
+
+```
+go build -o /tmp/pinentry-go ./cmd/pinentry-go
+```
+
+## Introduction
+
 A Wayland-native GTK4 GUI replacement for
 [pinentry](https://gnupg.org/software/pinentry/index.html) that shows a clear
 visual indicator of **which key is being unlocked**.
