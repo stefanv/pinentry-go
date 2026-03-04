@@ -11,11 +11,32 @@ that color so you always know which key is at stake at a glance.
 
 ![Screenshot placeholder](docs/screenshot.png)
 
+### What is a keygrip?
+
+A keygrip is gpg-agent's internal identifier for a key — a fixed-length hex
+string that uniquely identifies a key regardless of its format or storage
+location. It is what gpg-agent uses when it asks pinentry-go which key is
+being unlocked.
+
+For unrecognized keys, pinentry-go displays the keygrip in the dialog header
+so you can copy it directly into your config. To look up keygrips in advance:
+
+```sh
+gpg --list-secret-keys --with-keygrip   # GPG keys and GPG-managed SSH auth keys
+gpg-connect-agent "keyinfo --list" /bye  # all keys the agent holds, including SSH
+```
+
+For SSH keys added via `ssh-add`, there is no direct keygrip-to-filename
+mapping. The most reliable method is to correlate by position: the *n*th entry
+in `gpg-connect-agent "keyinfo --list" /bye` corresponds to the *n*th entry
+in `ssh-add -L`, which shows the public key and its comment (usually the
+original filename).
+
 ## Features
 
 - Native Wayland support (GTK4, no XWayland required)
 - Per-key accent color and name configured via a simple TOML file
-- Prefix-based key matching (one rule can cover a whole class of keys)
+- Per-key matching via hex keygrip substring
 - Drop-in replacement for any `pinentry` variant — speaks the standard Assuan
   protocol over stdin/stdout
 - Config is reloaded on every dialog open; no restart needed
@@ -69,21 +90,17 @@ color = "#888888"
 name  = "Unknown key"
 
 # Rules are matched in order; the first matching rule wins.
-# 'match' is a substring match against the key identifier that gpg-agent
-# provides.  To find the identifier for a key, run:
+# 'match' is a substring match against the SETKEYINFO value that gpg-agent
+# sends.  The value has the form "<status>/<hexkeygrip>" where <status> is
+# a cache-state letter (n=not cached, s=session cache, t=TTL expired,
+# u=in use).  Match on the hex keygrip.
 #
-#   gpg --list-keys --with-keygrip
-#
-# The identifier has the form:
-#   n/HEXSTRING  — encryption subkey
-#   s/HEXSTRING  — signing subkey
-#   u/HEXSTRING  — authentication subkey (SSH)
-#
-# You can match by hex ID alone (no type prefix needed), or match a whole
-# class by using just the prefix, e.g. "u/" for all SSH keys.
+# Find keygrips with:
+#   gpg --list-keys --with-keygrip          (GPG keys)
+#   gpg-connect-agent "keyinfo --list" /bye  (all keys including SSH)
 
 [[keys]]
-match = "AABBCCDD"            # matches any key whose ID contains this hex
+match = "AABBCCDD"            # hex keygrip substring
 name  = "SSH Key (work)"
 color = "#0066cc"             # blue
 
@@ -93,7 +110,7 @@ name  = "Unix Pass store"
 color = "#cc0000"             # red
 
 [[keys]]
-match = "s/"                  # matches all signing keys
+match = "EEFF0011"
 name  = "Signing key"
 color = "#007700"             # green
 ```
