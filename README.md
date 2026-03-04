@@ -69,8 +69,8 @@ color = "#888888"
 name  = "Unknown key"
 
 # Rules are matched in order; the first matching rule wins.
-# 'match' is compared as a prefix against the key identifier that
-# gpg-agent provides.  To find the identifier for a key, run:
+# 'match' is a substring match against the key identifier that gpg-agent
+# provides.  To find the identifier for a key, run:
 #
 #   gpg --list-keys --with-keygrip
 #
@@ -78,19 +78,22 @@ name  = "Unknown key"
 #   n/HEXSTRING  — encryption subkey
 #   s/HEXSTRING  — signing subkey
 #   u/HEXSTRING  — authentication subkey (SSH)
+#
+# You can match by hex ID alone (no type prefix needed), or match a whole
+# class by using just the prefix, e.g. "u/" for all SSH keys.
 
 [[keys]]
-match = "n/AABBCCDD"          # replace with your actual key identifier
+match = "AABBCCDD"            # matches any key whose ID contains this hex
 name  = "SSH Key (work)"
 color = "#0066cc"             # blue
 
 [[keys]]
-match = "n/11223344"
+match = "11223344"
 name  = "Unix Pass store"
 color = "#cc0000"             # red
 
 [[keys]]
-match = "s/"                  # matches *all* signing keys
+match = "s/"                  # matches all signing keys
 name  = "Signing key"
 color = "#007700"             # green
 ```

@@ -24,11 +24,13 @@ type Defaults struct {
 
 // KeyRule maps a key identifier prefix to a display style.
 type KeyRule struct {
-	// Match is compared as a prefix against the SETKEYINFO value sent by
+	// Match is checked as a substring against the SETKEYINFO value sent by
 	// gpg-agent.  To find the value for a key, run:
 	//   gpg --list-keys --with-keygrip
 	// The value has the form "n/HEXSTRING" (encryption), "s/HEXSTRING"
 	// (signing), or "u/HEXSTRING" (authentication/SSH).
+	// You can match a specific key by its hex ID alone, or match a whole
+	// class by including the type prefix (e.g. match = "u/" for all SSH keys).
 	Match string `toml:"match"`
 	// Name is a human-readable label shown in the dialog header.
 	Name string `toml:"name"`
@@ -95,11 +97,11 @@ func Load() (*Config, error) {
 
 // FindStyle returns the Style for the given key identifier (the raw value
 // received from SETKEYINFO).  Rules are tested in order; the first whose
-// Match string is a prefix of keyID wins.  If no rule matches, the defaults
-// are returned.
+// Match string is a substring of keyID wins.  If no rule matches, the
+// defaults are returned.
 func (c *Config) FindStyle(keyID string) Style {
 	for _, rule := range c.Keys {
-		if strings.HasPrefix(keyID, rule.Match) {
+		if strings.Contains(keyID, rule.Match) {
 			return Style{Name: rule.Name, Color: rule.Color}
 		}
 	}
