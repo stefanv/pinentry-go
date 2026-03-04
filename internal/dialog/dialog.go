@@ -177,6 +177,7 @@ func (d *Dialog) buildWindow(title string, st config.Style) (
 	header.SetShowTitleButtons(true)
 
 	keyLabel = gtk.NewLabel(st.Name)
+	keyLabel.SetSelectable(true)
 	header.SetTitleWidget(keyLabel)
 
 	provider := gtk.NewCSSProvider()

@@ -24,13 +24,14 @@ type Defaults struct {
 
 // KeyRule maps a key identifier prefix to a display style.
 type KeyRule struct {
-	// Match is checked as a substring against the SETKEYINFO value sent by
-	// gpg-agent.  To find the value for a key, run:
-	//   gpg --list-keys --with-keygrip
-	// The value has the form "n/HEXSTRING" (encryption), "s/HEXSTRING"
-	// (signing), or "u/HEXSTRING" (authentication/SSH).
-	// You can match a specific key by its hex ID alone, or match a whole
-	// class by including the type prefix (e.g. match = "u/" for all SSH keys).
+	// Match is a substring matched against the SETKEYINFO value sent by
+	// gpg-agent.  The value has the form "<status>/<hexkeygrip>" where
+	// <status> is a cache-state letter (n=not cached, s=session cache,
+	// t=TTL expired, u=in use).  Match on the hex keygrip.
+	//
+	// Find keygrips with:
+	//   gpg --list-keys --with-keygrip          (GPG keys)
+	//   gpg-connect-agent "keyinfo --list" /bye  (all keys including SSH)
 	Match string `toml:"match"`
 	// Name is a human-readable label shown in the dialog header.
 	Name string `toml:"name"`
@@ -105,7 +106,11 @@ func (c *Config) FindStyle(keyID string) Style {
 			return Style{Name: rule.Name, Color: rule.Color}
 		}
 	}
-	return Style{Name: c.Defaults.Name, Color: c.Defaults.Color}
+	name := c.Defaults.Name
+	if keyID != "" {
+		name = keyID
+	}
+	return Style{Name: name, Color: c.Defaults.Color}
 }
 
 // configPath returns the path to the config file, honouring XDG_CONFIG_HOME.

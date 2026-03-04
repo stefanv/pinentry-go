@@ -96,7 +96,7 @@ func TestFindStyle(t *testing.T) {
 		{"n/AABBCCDDFFEE", "Work SSH", "#0066cc"},   // longer id, same prefix
 		{"s/DEADBEEF", "Signing", "#007700"},        // prefix "s/" matches
 		{"n/11223344CAFE", "Pass store", "#cc0000"},  // third rule
-		{"u/CAFECAFE", "Unknown", "#888888"},         // no match → defaults
+		{"u/CAFECAFE", "u/CAFECAFE", "#888888"},      // no match → show keygrip
 		{"", "Unknown", "#888888"},                   // empty id → defaults
 	}
 
