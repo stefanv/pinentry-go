@@ -15,8 +15,18 @@ func main() {
 	log.SetFlags(0)
 	log.SetOutput(os.Stderr)
 
-	p := dialog.New()
-	if err := pinentry.Serve(os.Stdin, os.Stdout, p); err != nil {
-		log.Fatal(err)
+	d := dialog.New()
+
+	// Run the Assuan server in a background goroutine; the GTK main loop
+	// must own the main goroutine (GTK requirement).
+	go func() {
+		if err := pinentry.Serve(os.Stdin, os.Stdout, d); err != nil {
+			log.Print(err)
+		}
+		d.Quit()
+	}()
+
+	if code := d.Run(os.Args); code > 0 {
+		os.Exit(code)
 	}
 }
