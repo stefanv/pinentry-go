@@ -50,7 +50,11 @@ type Dialog struct {
 
 // New creates a new Dialog.
 func New() *Dialog {
-	app := gtk.NewApplication("com.github.stefanv.pinentry_go", gio.ApplicationFlagsNone)
+	// ApplicationNonUnique: each invocation of pinentry-go is an independent
+	// process; we must not use D-Bus single-instance enforcement, otherwise a
+	// second call by gpg-agent would just activate the first instance and exit
+	// without showing a dialog.
+	app := gtk.NewApplication("com.github.stefanv.pinentry_go", gio.ApplicationNonUnique)
 	d := &Dialog{
 		app:   app,
 		reqCh: make(chan request),
