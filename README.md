@@ -159,4 +159,4 @@ accent.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+The Unlicense — see [LICENSE](LICENSE).
