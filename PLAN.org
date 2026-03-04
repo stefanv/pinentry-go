@@ -1,0 +1,229 @@
+#+TITLE: pinentry-go — Implementation Plan
+#+AUTHOR: Stefan van der Walt
+#+DATE: 2026-03-03
+
+* Overview
+
+A Wayland-native GTK4 GUI replacement for =pinentry= that displays
+a clear visual indicator of *which* key is being unlocked. Key
+identities are mapped to accent colors and names via a user-editable
+TOML configuration file.
+
+* Goals
+
+- Drop-in replacement for =pinentry= (speaks the Assuan protocol over stdin/stdout)
+- Native Wayland support via GTK4 (no XWayland required)
+- Per-key color accent on the dialog (header bar / top banner color)
+- Simple TOML config at =~/.config/pinentry-go/config.toml=
+- Full test coverage for non-GUI code
+- Automated GitHub Actions CI + release on tag push
+
+* Non-Goals
+
+- TTY / curses fallback (out of scope for now)
+- Password quality bar (SETQUALITYBAR) in v1
+- Password generation (SETGENPIN) in v1
+- External password cache (allow-external-password-cache) in v1
+
+* Module & Repository
+
+| Item           | Value                                    |
+|----------------+------------------------------------------|
+| Module path    | =github.com/stefanv/pinentry-go=         |
+| Go version     | 1.22+                                    |
+| License        | MIT                                      |
+| GUI toolkit    | GTK4 via =github.com/diamondburned/gotk4= |
+| Assuan library | =github.com/foxcpp/go-assuan=            |
+| Config format  | TOML via =github.com/BurntSushi/toml=    |
+
+* Directory Layout
+
+#+begin_src
+pinentry-go/
+├── cmd/
+│   └── pinentry-go/
+│       └── main.go          # Entry point; wires protocol → dialog
+├── internal/
+│   ├── config/
+│   │   ├── config.go        # Config struct, loader, key-grip matching
+│   │   └── config_test.go
+│   ├── dialog/
+│   │   ├── dialog.go        # GTK4 dialog (GetPin, Confirm, Message)
+│   │   ├── dialog_test.go   # Tests using mock/headless where possible
+│   │   └── css.go           # Dynamic CSS generation for accent colors
+│   └── pinentry/
+│       ├── server.go        # Assuan command handlers; orchestrates dialog
+│       └── server_test.go
+├── .github/
+│   └── workflows/
+│       ├── ci.yml           # Build + test on push / PR
+│       └── release.yml      # GoReleaser on tag push
+├── .goreleaser.yml
+├── go.mod
+├── go.sum
+├── PLAN.org                 # This file
+├── README.md
+└── LICENSE
+#+end_src
+
+* Configuration Format
+
+Config file: =~/.config/pinentry-go/config.toml=
+
+#+begin_src toml
+# Default accent color for unrecognized keys (CSS color string)
+[defaults]
+color = "#888888"
+name  = "Unknown key"
+
+# Per-key rules — matched in order; first match wins.
+# 'match' is compared as a prefix against the internal key identifier
+# passed by gpg-agent (obtain it by running: gpg --list-keys --with-keygrip).
+# The identifier has the form "n/HEXSTRING" (encryption), "s/HEXSTRING" (signing),
+# or "u/HEXSTRING" (authentication).
+[[keys]]
+match = "n/AABBCCDD"
+name  = "SSH Key (work laptop)"
+color = "#0066cc"   # blue
+
+[[keys]]
+match = "n/11223344"
+name  = "Unix Pass store"
+color = "#cc0000"   # red
+
+[[keys]]
+match = "s/"         # matches any signing key by prefix
+name  = "Signing key"
+color = "#007700"   # green
+#+end_src
+
+Config is optional; the binary runs with defaults if the file is absent.
+The config is reloaded each time a dialog is shown (no restart needed).
+
+* Assuan Protocol — Supported Commands
+
+| Command             | Action                                           |
+|---------------------+--------------------------------------------------|
+| =GETINFO flavor=    | Returns =D gtk4=                                 |
+| =GETINFO version=   | Returns =D <version>=                            |
+| =GETINFO ttyinfo=   | Returns =D - - -=                                |
+| =GETINFO pid=       | Returns =D <pid>=                                |
+| =OPTION <k>[=<v>]= | Stored; =grab= / window-handle options noted     |
+| =SETTITLE=          | Stored                                           |
+| =SETDESC=           | Stored (shown in dialog body)                    |
+| =SETPROMPT=         | Stored (label next to entry field)               |
+| =SETOK=             | Stored (OK button label)                         |
+| =SETCANCEL=         | Stored (Cancel button label)                     |
+| =SETNOTOK=          | Stored (third button, shown when set)            |
+| =SETERROR=          | Stored (shown as error text in dialog)           |
+| =SETKEYINFO=        | Stored; used to look up color config             |
+| =SETREPEAT=         | Stored; dialog shows two entry fields            |
+| =SETTIMEOUT=        | Stored; dialog auto-cancels after N seconds      |
+| =GETPIN=            | Shows GTK4 password dialog; returns =D <pin>=    |
+| =CONFIRM=           | Shows GTK4 confirm dialog; returns =OK= or =ERR= |
+| =MESSAGE=           | Shows GTK4 info dialog; returns =OK=             |
+| =RESET=             | Clears all stored state                          |
+| =NOP=               | Returns =OK=                                     |
+| =BYE=               | Returns =OK=, exits                              |
+
+* Dialog Design
+
+The dialog is a compact GTK4 =ApplicationWindow=:
+
+#+begin_src
+┌──────────────────────────────────────┐
+│ ░░░░░░ SSH Key (work laptop) ░░░░░░  │  ← colored header bar
+│                                      │    (accent color from config)
+│  Please enter the passphrase for     │
+│  key 0xAABBCCDD "Alice <a@b.com>"    │  ← SETDESC text
+│                                      │
+│  Passphrase: [______________________]│  ← SETPROMPT + entry
+│                                      │
+│            [Cancel]  [  OK  ]        │
+└──────────────────────────────────────┘
+#+end_src
+
+- Header bar background color = accent color from config
+- Key name (from config) shown in the header bar
+- SETERROR text appears in red below the entry field when set
+- SETREPEAT adds a second "Repeat passphrase:" entry
+- Timeout countdown shown in the header bar when SETTIMEOUT is set
+
+CSS is generated dynamically per-dialog using =gtk_css_provider_new()=.
+
+* Implementation Phases
+
+** Phase 1 — Scaffold [DONE when: repo compiles, CI green]
+- [ ] =go.mod= with module path and dependencies
+- [ ] =LICENSE= (MIT)
+- [ ] =README.md= (installation, config, gpg-agent setup)
+- [ ] Stub =main.go= that starts the Assuan server
+- [ ] =.github/workflows/ci.yml=
+- [ ] =.github/workflows/release.yml= + =.goreleaser.yml=
+
+** Phase 2 — Config package [DONE when: tests pass]
+- [ ] =internal/config/config.go=: struct, loader, =FindKey(grip)= function
+- [ ] =internal/config/config_test.go=: table-driven tests for matching
+- [ ] Handles missing config file gracefully (returns defaults)
+
+** Phase 3 — Assuan server [DONE when: tests pass]
+- [ ] =internal/pinentry/server.go=: state struct + all command handlers
+- [ ] =internal/pinentry/server_test.go=: test each handler in isolation
+- [ ] Handlers call a =Presenter= interface (mockable in tests)
+
+** Phase 4 — GTK4 dialog [DONE when: dialog shows and returns pin]
+- [ ] =internal/dialog/css.go=: CSS string builder for accent color
+- [ ] =internal/dialog/dialog.go=: GTK4 implementation of =Presenter=
+- [ ] Manual smoke-test: run binary, send Assuan commands by hand
+
+** Phase 5 — Integration & polish [DONE when: gpg-agent uses it]
+- [ ] Wire =main.go=: create config, dialog, server; call =ServeStdin=
+- [ ] Test with real gpg-agent (=~/.gnupg/gpg-agent.conf=)
+- [ ] Handle timeout display in header bar
+- [ ] Handle SETERROR display
+- [ ] Handle SETREPEAT (dual entry + match check)
+- [ ] Confirm dialog (CONFIRM command)
+- [ ] Message dialog (MESSAGE command)
+
+** Phase 6 — Release
+- [ ] =go vet= + =staticcheck= clean
+- [ ] =README.md= complete with screenshots
+- [ ] Tag =v0.1.0= → CI publishes release via GoReleaser
+
+* Dependencies
+
+| Package                                   | Purpose                     |
+|-------------------------------------------+-----------------------------|
+| =github.com/diamondburned/gotk4/pkg/gtk/v4= | GTK4 widgets              |
+| =github.com/diamondburned/gotk4/pkg/gio/v2= | GIO application           |
+| =github.com/diamondburned/gotk4/pkg/core/glib= | GLib main loop         |
+| =github.com/foxcpp/go-assuan=             | Assuan protocol server/client |
+| =github.com/BurntSushi/toml=              | TOML config parsing         |
+
+Build-time system dependencies: =libgtk-4-dev=, =libglib2.0-dev=
+
+* gpg-agent Integration
+
+Add to =~/.gnupg/gpg-agent.conf=:
+
+#+begin_src
+pinentry-program /usr/local/bin/pinentry-go
+#+end_src
+
+Then restart the agent: =gpgconf --kill gpg-agent=
+
+* Testing Strategy
+
+- =internal/config=: pure Go, full unit tests
+- =internal/pinentry=: uses a =Presenter= interface; mock in tests
+- =internal/dialog=: GTK requires a display; tests skipped in CI
+  (headless GTK possible with =GDK_BACKEND=offscreen= or Xvfb, deferred)
+- Integration: manual + documented smoke-test procedure
+
+* Open Questions / Future Work
+
+- [ ] Support =SETQUALITYBAR= (password strength indicator)
+- [ ] Support =SETGENPIN= (generate passphrase button)
+- [ ] Snap/Flatpak packaging
+- [ ] AUR / Homebrew package
+- [ ] Consider =GDK_BACKEND=offscreen= for GTK dialog unit tests in CI
