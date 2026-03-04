@@ -146,8 +146,7 @@ func orDefault(s, def string) string {
 	return def
 }
 
-// accentCSS returns a CSS snippet that colors a widget with class
-// pinentry-header using the given color.
+// accentCSS returns CSS that colors a headerbar with class pinentry-header.
 func accentCSS(color string) string {
 	return fmt.Sprintf(
 		"headerbar.pinentry-header { background: %[1]s; background-color: %[1]s; }"+
@@ -157,22 +156,23 @@ func accentCSS(color string) string {
 }
 
 // buildWindow creates an ApplicationWindow with a colored header bar.
-// The returned responder calls win.Destroy() and sends the response exactly
-// once (subsequent calls are no-ops).
+// Returns the window, the header's key-name label (so callers can update it,
+// e.g. for a timeout countdown), and a destroyOnce function that calls
+// win.Destroy() exactly once regardless of how many times it is invoked.
 func (d *Dialog) buildWindow(title string, st config.Style) (
 	win *gtk.ApplicationWindow,
-	header *gtk.HeaderBar,
-	responder func(response),
+	keyLabel *gtk.Label,
+	destroyOnce func(),
 ) {
 	win = gtk.NewApplicationWindow(d.app)
 	win.SetModal(true)
 	win.SetResizable(false)
 	win.SetDefaultSize(420, -1)
 
-	header = gtk.NewHeaderBar()
+	header := gtk.NewHeaderBar()
 	header.SetShowTitleButtons(true)
 
-	keyLabel := gtk.NewLabel(st.Name)
+	keyLabel = gtk.NewLabel(st.Name)
 	header.SetTitleWidget(keyLabel)
 
 	provider := gtk.NewCSSProvider()
@@ -186,15 +186,11 @@ func (d *Dialog) buildWindow(title string, st config.Style) (
 	}
 
 	var once sync.Once
-	responder = func(resp response) {
-		once.Do(func() {
-			win.Destroy()
-		})
-	}
-	return win, header, responder
+	destroyOnce = func() { once.Do(win.Destroy) }
+	return win, keyLabel, destroyOnce
 }
 
-// errorLabel creates a small red label for SETERROR text.
+// errorLabel creates a small red italic label (for SETERROR or mismatch text).
 func errorLabel(msg string) *gtk.Label {
 	lbl := gtk.NewLabel(msg)
 	lbl.SetWrap(true)
@@ -207,12 +203,13 @@ func errorLabel(msg string) *gtk.Label {
 	return lbl
 }
 
-// promptRow creates a horizontal box with a label and a password entry.
+// promptRow creates a horizontal box with a right-aligned label and a
+// password entry, with entries sized consistently across rows.
 func promptRow(label string, entry *gtk.PasswordEntry) *gtk.Box {
 	row := gtk.NewBox(gtk.OrientationHorizontal, 8)
 	lbl := gtk.NewLabel(label)
 	lbl.SetXAlign(1)
-	lbl.SetWidthChars(14) // align entries across rows
+	lbl.SetWidthChars(14)
 	entry.SetHExpand(true)
 	entry.SetShowPeekIcon(true)
 	row.Append(lbl)
@@ -220,12 +217,37 @@ func promptRow(label string, entry *gtk.PasswordEntry) *gtk.Box {
 	return row
 }
 
+// startCountdown ticks every second, updating keyLabel with a "Name (Ns)"
+// suffix and calling cancel when it reaches zero.
+func startCountdown(keyName string, seconds int, keyLabel *gtk.Label, cancel func()) {
+	remaining := seconds
+	keyLabel.SetLabel(fmt.Sprintf("%s (%ds)", keyName, remaining))
+	glib.TimeoutAdd(1000, func() bool {
+		remaining--
+		if remaining <= 0 {
+			cancel()
+			return false // remove the timeout source
+		}
+		keyLabel.SetLabel(fmt.Sprintf("%s (%ds)", keyName, remaining))
+		return true // keep ticking
+	})
+}
+
 // --- dialog builders --------------------------------------------------------
 
 func (d *Dialog) showGetPin(req request) {
 	s := req.settings
 	st := loadStyle(s.KeyID)
-	win, _, destroy := d.buildWindow(s.Title, st)
+	win, keyLabel, destroyOnce := d.buildWindow(s.Title, st)
+
+	var responded bool
+	respondOnce := func(resp response) {
+		if !responded {
+			responded = true
+			destroyOnce()
+			req.respCh <- resp
+		}
+	}
 
 	outer := gtk.NewBox(gtk.OrientationVertical, 10)
 	outer.SetMarginTop(14)
@@ -254,7 +276,7 @@ func (d *Dialog) showGetPin(req request) {
 		outer.Append(promptRow(stripMnemonic(s.RepeatPrompt), repeatEntry))
 	}
 
-	// Mismatch error label (hidden until needed).
+	// Mismatch label — hidden until a repeat mismatch occurs.
 	mismatchLbl := errorLabel("Passphrases do not match")
 	mismatchLbl.SetVisible(false)
 	outer.Append(mismatchLbl)
@@ -275,19 +297,6 @@ func (d *Dialog) showGetPin(req request) {
 	win.SetDefaultWidget(okBtn)
 	win.SetFocus(entry)
 
-	respond := func(resp response) {
-		destroy(resp)
-		req.respCh <- resp
-	}
-
-	var responded bool
-	respondOnce := func(resp response) {
-		if !responded {
-			responded = true
-			respond(resp)
-		}
-	}
-
 	cancelBtn.ConnectClicked(func() {
 		respondOnce(response{err: pinentry.ErrCanceled})
 	})
@@ -301,7 +310,6 @@ func (d *Dialog) showGetPin(req request) {
 		respondOnce(response{pin: pin})
 	})
 
-	// Enter in the entry field activates OK.
 	entry.ConnectActivate(func() {
 		if repeatEntry == nil {
 			okBtn.Activate()
@@ -318,8 +326,8 @@ func (d *Dialog) showGetPin(req request) {
 		return false
 	})
 
-	if s.Timeout > 0 {
-		glib.TimeoutAdd(uint(s.Timeout.Milliseconds()), func() {
+	if secs := int(s.Timeout.Seconds()); secs > 0 {
+		startCountdown(st.Name, secs, keyLabel, func() {
 			respondOnce(response{err: pinentry.ErrCanceled})
 		})
 	}
@@ -330,7 +338,16 @@ func (d *Dialog) showGetPin(req request) {
 func (d *Dialog) showConfirm(req request) {
 	s := req.settings
 	st := loadStyle(s.KeyID)
-	win, _, destroy := d.buildWindow(s.Title, st)
+	win, _, destroyOnce := d.buildWindow(s.Title, st)
+
+	var responded bool
+	respond := func(resp response) {
+		if !responded {
+			responded = true
+			destroyOnce()
+			req.respCh <- resp
+		}
+	}
 
 	outer := gtk.NewBox(gtk.OrientationVertical, 10)
 	outer.SetMarginTop(14)
@@ -352,17 +369,7 @@ func (d *Dialog) showConfirm(req request) {
 	okBtn := gtk.NewButtonWithMnemonic(orDefault(s.OkBtn, "_OK"))
 	okBtn.AddCSSClass("suggested-action")
 
-	var responded bool
-	respond := func(resp response) {
-		if !responded {
-			responded = true
-			destroy(resp)
-			req.respCh <- resp
-		}
-	}
-
 	if !req.oneButton {
-		// Optional "Not OK" (third) button on the left.
 		if s.NotOkBtn != "" {
 			notOkBtn := gtk.NewButtonWithMnemonic(s.NotOkBtn)
 			notOkBtn.ConnectClicked(func() {
@@ -370,7 +377,6 @@ func (d *Dialog) showConfirm(req request) {
 			})
 			btnBox.Append(notOkBtn)
 		}
-
 		cancelBtn := gtk.NewButtonWithMnemonic(orDefault(s.CancelBtn, "_Cancel"))
 		cancelBtn.ConnectClicked(func() {
 			respond(response{err: pinentry.ErrNotConfirmed})
@@ -400,7 +406,16 @@ func (d *Dialog) showConfirm(req request) {
 func (d *Dialog) showMessage(req request) {
 	s := req.settings
 	st := loadStyle(s.KeyID)
-	win, _, destroy := d.buildWindow(s.Title, st)
+	win, _, destroyOnce := d.buildWindow(s.Title, st)
+
+	var responded bool
+	respond := func(resp response) {
+		if !responded {
+			responded = true
+			destroyOnce()
+			req.respCh <- resp
+		}
+	}
 
 	outer := gtk.NewBox(gtk.OrientationVertical, 10)
 	outer.SetMarginTop(14)
@@ -421,16 +436,6 @@ func (d *Dialog) showMessage(req request) {
 
 	okBtn := gtk.NewButtonWithMnemonic(orDefault(s.OkBtn, "_OK"))
 	okBtn.AddCSSClass("suggested-action")
-
-	var responded bool
-	respond := func(resp response) {
-		if !responded {
-			responded = true
-			destroy(resp)
-			req.respCh <- resp
-		}
-	}
-
 	okBtn.ConnectClicked(func() { respond(response{}) })
 	btnBox.Append(okBtn)
 	outer.Append(btnBox)

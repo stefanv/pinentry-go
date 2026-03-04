@@ -24,7 +24,10 @@ that color so you always know which key is at stake at a glance.
 
 ### From source
 
-Build dependencies: `libgtk-4-dev`, `libglib2.0-dev`, `gcc`
+Build dependencies: `libgtk-4-dev`, `libglib2.0-dev`, `libgirepository1.0-dev`, `gcc`
+
+On Fedora/RHEL: `gtk4-devel glib2-devel gobject-introspection-devel gcc`
+On Debian/Ubuntu: `libgtk-4-dev libglib2.0-dev libgirepository1.0-dev gcc`
 
 ```sh
 go install github.com/stefanv/pinentry-go/cmd/pinentry-go@latest

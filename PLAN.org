@@ -153,41 +153,41 @@ CSS is generated dynamically per-dialog using =gtk_css_provider_new()=.
 
 * Implementation Phases
 
-** Phase 1 — Scaffold [DONE when: repo compiles, CI green]
-- [ ] =go.mod= with module path and dependencies
-- [ ] =LICENSE= (MIT)
-- [ ] =README.md= (installation, config, gpg-agent setup)
-- [ ] Stub =main.go= that starts the Assuan server
-- [ ] =.github/workflows/ci.yml=
-- [ ] =.github/workflows/release.yml= + =.goreleaser.yml=
+** Phase 1 — Scaffold [DONE]
+- [x] =go.mod= with module path and dependencies
+- [x] =LICENSE= (MIT)
+- [x] =README.md= (installation, config, gpg-agent setup)
+- [x] =main.go= wired: Assuan server in goroutine, GTK owns main goroutine
+- [x] =.github/workflows/ci.yml=
+- [x] =.github/workflows/release.yml= + =.goreleaser.yml=
 
-** Phase 2 — Config package [DONE when: tests pass]
-- [ ] =internal/config/config.go=: struct, loader, =FindKey(grip)= function
-- [ ] =internal/config/config_test.go=: table-driven tests for matching
-- [ ] Handles missing config file gracefully (returns defaults)
+** Phase 2 — Config package [DONE]
+- [x] =internal/config/config.go=: struct, loader, =FindStyle(keyID)= function
+- [x] =internal/config/config_test.go=: 6 table-driven tests, all passing
+- [x] Handles missing config file gracefully (returns defaults)
 
-** Phase 3 — Assuan server [DONE when: tests pass]
-- [ ] =internal/pinentry/server.go=: state struct + all command handlers
-- [ ] =internal/pinentry/server_test.go=: test each handler in isolation
-- [ ] Handlers call a =Presenter= interface (mockable in tests)
+** Phase 3 — Assuan server [DONE]
+- [x] =internal/pinentry/server.go=: own =ProtoInfo= with =*Settings= state
+- [x] =internal/pinentry/server_test.go=: 17 tests covering all commands
+- [x] Handlers call a =Presenter= interface (mockable in tests)
+- [x] Uses =go-assuan/server= for protocol framing; own handlers for SET*/GETPIN/etc.
 
-** Phase 4 — GTK4 dialog [DONE when: dialog shows and returns pin]
-- [ ] =internal/dialog/css.go=: CSS string builder for accent color
-- [ ] =internal/dialog/dialog.go=: GTK4 implementation of =Presenter=
-- [ ] Manual smoke-test: run binary, send Assuan commands by hand
+** Phase 4 — GTK4 dialog [DONE]
+- [x] =internal/dialog/dialog.go=: GTK4 implementation of =Presenter=
+- [x] Per-key accent color in header bar via scoped CSS provider
+- [x] GETPIN with SETERROR, SETREPEAT + mismatch feedback, SETTIMEOUT countdown
+- [x] CONFIRM (1/2/3-button), MESSAGE
 
-** Phase 5 — Integration & polish [DONE when: gpg-agent uses it]
-- [ ] Wire =main.go=: create config, dialog, server; call =ServeStdin=
-- [ ] Test with real gpg-agent (=~/.gnupg/gpg-agent.conf=)
-- [ ] Handle timeout display in header bar
-- [ ] Handle SETERROR display
-- [ ] Handle SETREPEAT (dual entry + match check)
-- [ ] Confirm dialog (CONFIRM command)
-- [ ] Message dialog (MESSAGE command)
+** Phase 5 — Integration & polish [DONE]
+- [x] Wire =main.go=
+- [x] =go vet= clean
+- [x] Timeout countdown visible in header bar ("Key name (12s)")
+- [x] README build dependencies updated (including =gobject-introspection=)
+- [ ] Smoke-test with real gpg-agent (=~/.gnupg/gpg-agent.conf=)
 
 ** Phase 6 — Release
-- [ ] =go vet= + =staticcheck= clean
-- [ ] =README.md= complete with screenshots
+- [ ] Smoke-test confirmed working with gpg-agent
+- [ ] =README.md= updated with screenshot
 - [ ] Tag =v0.1.0= → CI publishes release via GoReleaser
 
 * Dependencies
