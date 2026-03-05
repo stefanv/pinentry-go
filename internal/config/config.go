@@ -22,7 +22,7 @@ type Defaults struct {
 	Name string `toml:"name"`
 }
 
-// KeyRule maps a key identifier prefix to a display style.
+// KeyRule maps a key identifier substring to a display style.
 type KeyRule struct {
 	// Match is a substring matched against the SETKEYINFO value sent by
 	// gpg-agent.  The value has the form "<status>/<hexkeygrip>" where

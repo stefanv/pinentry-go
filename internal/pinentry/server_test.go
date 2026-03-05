@@ -2,6 +2,7 @@ package pinentry
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -49,7 +50,7 @@ func newSession(t *testing.T, mock *mockPresenter) *session {
 	stdoutR, stdoutW := io.Pipe()
 
 	go func() {
-		if err := Serve(stdinR, stdoutW, mock); err != nil && err != io.ErrClosedPipe {
+		if err := Serve(stdinR, stdoutW, mock); err != nil && !errors.Is(err, io.ErrClosedPipe) {
 			// Ignore pipe-closed errors that happen on BYE/test teardown.
 		}
 		stdoutW.Close()

@@ -10,9 +10,11 @@
 package pinentry
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,10 +40,10 @@ type Presenter interface {
 }
 
 // ErrCanceled is returned by Presenter.GetPin when the user cancels.
-var ErrCanceled = fmt.Errorf("operation cancelled")
+var ErrCanceled = errors.New("operation cancelled")
 
 // ErrNotConfirmed is returned by Presenter.Confirm when the user declines.
-var ErrNotConfirmed = fmt.Errorf("not confirmed")
+var ErrNotConfirmed = errors.New("not confirmed")
 
 // Settings extends the library's pinentry.Settings with the key identifier
 // received via SETKEYINFO, which we use to look up the per-key accent color.
@@ -136,7 +138,7 @@ func buildProtoInfo(p Presenter) server.ProtoInfo {
 		case "ttyinfo":
 			reply = "- - -"
 		case "pid":
-			reply = fmt.Sprintf("%d", os.Getpid())
+			reply = strconv.Itoa(os.Getpid())
 		default:
 			return assuanErr(common.ErrSrcPinentry, common.ErrAssInvValue,
 				"unknown GETINFO parameter: "+params)
@@ -151,7 +153,7 @@ func buildProtoInfo(p Presenter) server.ProtoInfo {
 		s := state.(*Settings)
 		pin, err := p.GetPin(*s)
 		s.Error = "" // clear error after each attempt (standard pinentry behaviour)
-		if err == ErrCanceled {
+		if errors.Is(err, ErrCanceled) {
 			return assuanErr(common.ErrSrcPinentry, common.ErrCanceled, "Operation cancelled")
 		}
 		if err != nil {
@@ -164,14 +166,13 @@ func buildProtoInfo(p Presenter) server.ProtoInfo {
 	h["CONFIRM"] = func(_ io.ReadWriter, state interface{}, params string) *common.Error {
 		oneButton := strings.Contains(params, "--one-button")
 		err := p.Confirm(*state.(*Settings), oneButton)
-		switch err {
-		case nil:
+		if err == nil {
 			return nil
-		case ErrNotConfirmed:
-			return assuanErr(common.ErrSrcPinentry, common.ErrNotConfirmed, "Not confirmed")
-		default:
-			return assuanErr(common.ErrSrcPinentry, common.ErrCanceled, "Operation cancelled")
 		}
+		if errors.Is(err, ErrNotConfirmed) {
+			return assuanErr(common.ErrSrcPinentry, common.ErrNotConfirmed, "Not confirmed")
+		}
+		return assuanErr(common.ErrSrcPinentry, common.ErrCanceled, "Operation cancelled")
 	}
 
 	h["MESSAGE"] = func(_ io.ReadWriter, state interface{}, _ string) *common.Error {
@@ -193,8 +194,3 @@ func buildProtoInfo(p Presenter) server.ProtoInfo {
 	}
 }
 
-// TimeoutDuration returns the Timeout field as a time.Duration.
-// (The library stores it as time.Duration already; this is a convenience alias.)
-func TimeoutDuration(s Settings) time.Duration {
-	return s.Timeout
-}

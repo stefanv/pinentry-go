@@ -85,7 +85,6 @@ func (d *Dialog) onActivate() {
 	// Relay requests from the Assuan goroutine into the GTK main loop.
 	go func() {
 		for req := range d.reqCh {
-			req := req
 			glib.IdleAdd(func() { d.handleRequest(req) })
 		}
 		// Channel closed (BYE received) — release the hold and quit.
