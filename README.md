@@ -19,6 +19,19 @@ For an extra layer of safety, you can build the binary yourself too:
 go build -o /tmp/pinentry-go ./cmd/pinentry-go
 ```
 
+## Table of Contents
+
+- [Introduction](#introduction)
+  - [What is a keygrip?](#what-is-a-keygrip)
+- [Features](#features)
+- [Installation](#installation)
+  - [From source](#from-source)
+- [Configuration](#configuration)
+  - [Tell gpg-agent to use pinentry-go](#tell-gpg-agent-to-use-pinentry-go)
+  - [Key color configuration](#key-color-configuration)
+- [Assuan protocol support](#assuan-protocol-support)
+- [License](#license)
+
 ## Introduction
 
 A Wayland-native GTK4 GUI replacement for
@@ -29,8 +42,6 @@ When you have multiple GPG/SSH keys it can be hard to tell which passphrase
 you are being asked for. `pinentry-go` solves this by letting you assign a
 name and an accent color to each key. The dialog header is highlighted with
 that color so you always know which key is at stake at a glance.
-
-![Screenshot placeholder](docs/screenshot.png)
 
 ### What is a keygrip?
 
@@ -99,6 +110,23 @@ Then restart the agent:
 ```sh
 gpgconf --kill gpg-agent
 ```
+
+If you want to use a different pinentry program, depending on whether
+a GUI display is available or not, use a script like this as your
+pinentry program:
+
+```bash
+#!/bin/bash
+
+# If we are in a TMUX session, or if no GUI display is detected
+if [ -z "$DISPLAY" ] && [ -z "$WAYLAND_DISPLAY" ]; then
+    exec /usr/bin/pinentry-curses "$@"
+else
+    # Specify your preferred graphical pinentry here
+    exec /home/stefan/.local/bin/pinentry-go "$@"
+fi
+```
+
 
 ### Key color configuration
 
